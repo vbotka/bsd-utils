@@ -1,0 +1,104 @@
+#
+# Clone FreeBSD file system for diskless operation
+#
+
+export POSIXLY_CORRECT=yes
+
+DEST=/exportsXterm/diskless_root
+DESTROOT=/exportsXterm
+KERNEL=${DESTROOT}/kernel
+
+# you should not touch these vars:
+# SYSDIRS	system directories and mountpoints
+# DIRS		mountpoints (empty dirs)
+# PWFILES	files related to passwords
+# TOCOPY	files and dirs to copy from root partition
+
+SYSDIRS="dev proc root usr var"
+DIRS="cdrom home mnt scratch JukeBox"
+# PWFILES="master.passwd passwd spwd.db pwd.db"
+TOCOPY="bin boot compat etc sbin stand sys libexec lib"
+
+init_diskless_root() {
+	echo "Cleaning old diskless root ($DEST)"
+	cd ${DESTROOT}
+	chflags -R noschg diskless_root
+	rm -rf diskless_root && echo "Old diskless root removed."
+	echo "Creating $DEST..."
+	mkdir -p $DEST && echo "New diskless root created."
+	echo "+++ Now copy original tree from / ..."
+	ex=""
+	(cd / ; tar -cplf - ${TOCOPY} ) | (cd $DEST; tar xpvf - )
+#	(cd / ; find -x dev | cpio -o -H newc ) | \
+#	(cd $DEST; cpio -i -H newc -d )
+	echo "+++ Fixing permissions on some objects"
+	chflags noschg $DEST/sbin/init
+	chmod 555 $DEST/sbin/init
+}
+
+update_conf_and_pw() {
+	echo "+++ Copying files in /etc to ${DESTROOT}/conf/base/etc"
+	(cd /etc ; tar cpvf - . ) | (cd ${DESTROOT}/conf/base/etc ; tar xpf - )
+	echo "+++ Copying files in /conf and password files"
+	(cd ${DEST} ; rm -rf conf )
+	(cd ${DESTROOT} ; tar clf - conf ) | (cd ${DEST}; tar xvf - )
+}
+
+update() {
+	echo "+++ update: create mountpoints"
+	for i in ${SYSDIRS} ${DIRS}
+	do
+	    rm -r -f ${DEST}/$i
+	    mkdir -p ${DEST}/$i && chown root:wheel ${DEST}/$i && echo -n "$i "
+	done
+	echo "."
+	ln -s /var/tmp ${DEST}/tmp
+}
+
+kernel() {
+	echo "+++ Copying kernel&modules from ${KERNEL}"
+	chflags -R noschg ${DEST}/boot
+	(cd ${KERNEL}/boot ; tar cpvf - . ) | (cd ${DEST}/boot ; tar xpf - )
+	echo "."
+}
+
+root() {
+	echo "+++ Copying root from ${DESTROOT}/root to ${DEST}"
+	(cd ${DESTROOT}/root ; tar cpvf - . ) | (cd ${DEST} ; tar xpf - )
+        echo "."
+}
+
+# Main entry point
+case $1 in
+	all)	# clean and reinstall the whole diskless_root
+		init_diskless_root
+		kernel
+		root
+		update
+		update_conf_and_pw
+		;;
+
+	update)	# clean and rebuild mountpoints and device entries
+		update
+		update_conf_and_pw
+		;;
+
+	init)   # just init the diskless_root
+		init_diskless_root
+		;;
+
+	kernel) # just copy the kernel
+		kernel
+		root
+		;;
+
+	root)	# just copy the root specific files
+		root
+		;;
+
+	*)	# copy /conf and password files
+		update_conf_and_pw
+		;;
+esac
+exit 0
+### end of file ###
