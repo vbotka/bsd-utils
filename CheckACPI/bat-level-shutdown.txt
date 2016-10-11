@@ -1,0 +1,1 @@
+Battery level is critical. Shutdown scheduled in 2 minutes. Plug in power to prevent the shutdown.

@@ -1,0 +1,3 @@
+text2wave < bat-level-warning.txt > bat-level-warning.wav
+paplay planc-bat-level-warning.wav
+avconv -i bat-level-warning.wav bat-level-warning.mp3
