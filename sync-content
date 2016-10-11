@@ -1,0 +1,123 @@
+#!/usr/local/bin/bash
+
+RSYNC="/usr/local/bin/rsync"
+#RSYNC="/usr/bin/rsync"
+
+USAGE="$(basename "$0") [-h|--help] [-s|--silent] [-n|--dry-run] [-a|--all|<device>] -- synchronize content with devices
+where:
+    -h --help             show this help text and exit
+    -s --silent           report only errors
+    -n --dry-run          dry run
+    -a --all              synchronize all devices
+devices:
+    srv-jukebox          synchronize jukebox from srv
+    user-phone-photo     synchronize photo from user-phone
+    user-tab-doc         synchronize doc to user-tab"
+
+
+EXPECTED_ARGS=1
+if [ $# -lt $EXPECTED_ARGS ]; then
+    echo "$USAGE"
+    exit
+fi
+
+function sync-files-from-remote {
+    (($VERBOSE)) && echo "--------------------------------------------------------------"
+    if ssh -q $HOST exit; then
+	if LOG=$($RSYNC $RSYNCOPT $HOST:$SOURCE/ $TARGET/ 2>&1); then
+	    #		   chmod o+r-wx,ug+rw-x $TARGET/*
+	    #		   chown :smedia $TARGET/*
+	    (($VERBOSE)) && printf "[OK] $LOG\n[OK]$HOST $SOURCE synced to $TARGET\n"
+	else
+	    printf "[ERR] $LOG\n"
+	fi
+    else
+	printf "[ERR] $HOST not available\n"
+    fi
+}
+
+function sync-files-to-remote {
+    (($VERBOSE)) && echo "--------------------------------------------------------------"
+    if ssh -q $HOST exit; then
+	if LOG=$($RSYNC $RSYNCOPT $SOURCE/ $HOST:$TARGET/ 2>&1); then
+	    (($VERBOSE)) && printf "[OK] $SOURCE synced to $HOST:$TARGET\n"
+	else
+	    printf "[ERR] $LOG\n"
+	fi
+    else
+	printf "[ERR] $HOST not available\n"
+    fi
+}
+
+function srv-jukebox {
+    HOST="admin@srv.example.com"
+    RSYNCOPT="-a -e ssh"
+    SOURCE="/jukebox"
+    TARGET="/jukebox"
+    rsync-options
+    sync-files-from-remote
+}
+
+function user-phone-photo {
+    HOST="user-phone"
+    RSYNCOPT="-rz -e ssh"
+    SOURCE="/mnt/sdcard/DCIM/100ANDRO"
+    TARGET="/export/download/user-phone"
+    rsync-options
+    sync-files-from-remote
+}
+
+function user-tab-doc {
+    HOST="user-tab"
+    RSYNCOPT="--del --size-only -rz -e ssh"
+    SOURCE="/export/doc-tab"
+    TARGET="/sdcard/extStorages/SdCard/doc"
+    rsync-options
+    sync-files-to-remote
+}
+
+function rsync-options {
+    (($VERBOSE)) && RSYNCOPT="--verbose $RSYNCOPT"
+    (($DRYRUN)) && RSYNCOPT="--dry-run $RSYNCOPT"
+}    
+
+VERBOSE=1
+DRYRUN=0
+for i in "$@"; do
+    case $i in
+	-h|--help)
+	    echo "$USAGE"
+	    exit
+	    ;;
+	-s|--silent)
+	    VERBOSE=0
+	    ;;
+	-n|--dry-run)
+	    DRYRUN=1
+	    ;;
+	-a|--all)
+	    (($VERBOSE)) && echo "Sync all"
+	    srv-jukebox
+	    user-phone-photo
+	    user-tab-doc
+	    ;;
+	srv-jukebox)
+	    (($VERBOSE)) && echo "Sync jukebox from srv"
+	    srv-jukebox
+	    ;;
+	user-phone-photo)
+	    (($VERBOSE)) && echo "Sync photo from user-phone"
+	    user-phone-photo
+	    ;;
+	user-tab-doc)
+	    (($VERBOSE)) && echo "Sync doc to user-tab"
+	    user-tab-doc
+	    ;;
+	*)
+	    printf "[ERR] Unknown option $i\n"
+	    echo "$USAGE"
+	    exit
+	    ;;
+    esac
+done
+exit
