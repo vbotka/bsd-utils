@@ -1,0 +1,20 @@
+#!/usr/local/bin/bash
+
+# Generate /etc/libmap.conf to fix broken links in LIBDIR
+# https://galaxy.ansible.com/vbotka/ansible-freebsd-postinstall/
+LIBDIR="/usr/local/lib"
+
+for i in `find $LIBDIR/*.so* -type l ! -exec test -e {} \; -print `; do
+    k=`readlink $i*`
+    if [ ! -L "$k" ]; then
+	k=`find $i* -type f`
+	if [ !  -z  $k  ]; then
+	    j=`basename $i`
+	    l=`basename $k`
+#	    printf "$j $l\n"
+	    printf "  - { origin: \"$j\", target: \"$l\" }\n"
+	fi
+    fi
+done
+
+# EOF
