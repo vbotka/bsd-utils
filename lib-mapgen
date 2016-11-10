@@ -1,20 +1,165 @@
 #!/usr/local/bin/bash
+#set -x
 
-# Generate /etc/libmap.conf to fix broken links in LIBDIR
-# https://galaxy.ansible.com/vbotka/ansible-freebsd-postinstall/
+VERSION="0.1.0-CURRENT"
+#VERSION="0.1.0"
 LIBDIR="/usr/local/lib"
+LIBMAP="/etc/libmap.conf"
+ANSIBLEORIGIN="origin"
+ANSIBLETARGET="target"
+LOGTOFILE=0
+LOGFILE="/var/log/bsd-utils"
 
-for i in `find $LIBDIR/*.so* -type l ! -exec test -e {} \; -print `; do
-    k=`readlink $i*`
-    if [ ! -L "$k" ]; then
-	k=`find $i* -type f`
-	if [ !  -z  $k  ]; then
-	    j=`basename $i`
-	    l=`basename $k`
-#	    printf "$j $l\n"
-	    printf "  - { origin: \"$j\", target: \"$l\" }\n"
+[ -f /etc/bsd-utils ] && . /etc/bsd-utils
+[ -f /usr/local/etc/bsd-utils ] && . /usr/local/etc/bsd-utils
+[ -f ~/.bsd-utils ] && . ~/.bsd-utils
+[ -f ./.bsd-utils ] && . ./.bsd-utils
+
+USAGE="
+lib-mapgen [-V|--version] [-h|--help] [-s|--silent] [-d|--debug]
+           [-l|--list] [-a|--ansible] [-m| --libmap] [-ma|--libmap-append]
+           -- Map library links and generate $LIBMAP
+
+where:
+ -V  --version .......... print version
+ -h  --help ............. show this help
+ -s  --silent ........... print errors only
+ -d  --debug ............ print debug output
+ -l  --list ............. list broken links
+ -a  --ansible .......... list broken links in yaml array format
+ -m  --libmap ........... list only broken links missing in $LIBMAP
+ -ma --libmap-append..... append broken links to $LIBMAP
+
+Examples:
+List broken links in $LIBDIR
+# lib-mapgen  -l
+List broken links in $LIBDIR in yaml array format
+# lib-mapgen  -a -l
+List broken links in $LIBDIR not fixed in $LIBMAP
+# lib-mapgen  -m
+List broken links in $LIBDIR not fixed in $LIBMAP in yaml array format
+# lib-mapgen  -a -m
+Append broken links to $LIBMAP
+# lib-mapgen  -ma
+"
+
+EXPECTED_ARGS=1
+if [ $# -lt $EXPECTED_ARGS ]; then
+    echo "$USAGE"
+    exit
+fi
+
+function log-ok {
+    (($VERBOSE)) && printf "[OK]  lib-mapgen: $MESSAGE\n"
+    (($LOGTOFILE)) && printf "`date "+%F %T"` [OK]  lib-mapgen: $MESSAGE\n" >> $LOGFILE
+}
+function log-dbg {
+    if [ $DEBUG -eq 1 ]; then
+	printf "[DBG] lib-mapgen: $MESSAGE\n"
+	(($LOGTOFILE)) && printf "`date "+%F %T"` [DBG] lib-mapgen: $MESSAGE\n" >> $LOGFILE
+    fi
+}
+function log-err {
+    printf "[ERR] lib-mapgen: $MESSAGE\n"
+    (($LOGTOFILE)) && printf "`date "+%F %T"` [ERR] lib-mapgen: $MESSAGE\n" >> $LOGFILE
+}
+
+function print-config {
+    printf "[DBG] lib-mapconf: >>> CONFIG\n"
+    printf "[DBG] lib-mapconf: LIBDIR: $LIBDIR\n"
+    printf "[DBG] lib-mapconf: LIBMAP: $LIBMAP\n"
+    printf "[DBG] lib-mapconf: LOGTOFILE: $LOGTOFILE\n"
+    printf "[DBG] lib-mapconf: LOGFILE: $LOGFILE\n"
+    printf "[DBG] lib-mapconf: <<< CONFIG\n"
+}
+
+function report-link {
+    if [[ $ANSIBLE = 0 ]]; then
+	if [[ $LIBMAPCHECK = 0 ]]; then
+	    printf "$ORIGIN $TARGET\n"
+	else
+	    if LOG=$( ! grep "$ORIGIN $TARGET" $LIBMAP); then
+		if [[ $APPEND = 1 ]]; then
+		    printf "$ORIGIN $TARGET\n" >> $LIBMAP
+		else
+		    printf "$ORIGIN $TARGET\n"
+		fi
+	    fi
+	fi
+    else
+	if [[ $LIBMAPCHECK = 0 ]]; then
+	    printf "  - { origin: \"$ORIGIN\", target: \"$TARGET\" }\n"
+	else
+	    if LOG=$( ! grep "$ORIGIN $TARGET" $LIBMAP); then
+		printf "  - { $ANSIBLEORIGIN: \"$ORIGIN\", $ANSIBLETARGET: \"$TARGET\" }\n"
+	    fi
 	fi
     fi
+}
+
+function check-links {
+    for i in `find $LIBDIR/*.so* -type l ! -exec test -e {} \; -print `; do
+	k=`readlink $i*`
+	if [ ! -L "$k" ]; then
+	    k=`find $i* -type f`
+	    if [ !  -z  $k  ]; then
+		ORIGIN=`basename $i`
+		TARGET=`basename $k`
+		report-link
+	    fi
+	else
+	    MESSAGE=" No broken links found."; log-ok
+	fi
+    done
+}
+
+VERBOSE=1
+DEBUG=0
+ANSIBLE=0
+LIBMAPCHECK=0
+APPEND=0
+
+for i in "$@"; do
+    case $i in
+        -V|--version)
+	    printf "$VERSION\n"
+            exit 0
+            ;;
+        -h|--help)
+            printf "$USAGE\n"
+            exit 0
+            ;;
+        -s|--silent)
+            VERBOSE=0
+            ;;
+        -d|--debug)
+            DEBUG=1
+            ;;
+        -a|--ansible)
+	    ANSIBLE=1
+	    ;;
+        -m|--libmap)
+	    LIBMAPCHECK=1
+	    check-links
+	    exit 0
+	    ;;
+        -ma|--libmap-append)
+	    ANSIBLE=0
+	    LIBMAPCHECK=1
+	    APPEND=1
+	    check-links
+	    exit 0
+	    ;;
+        -l|--list)
+	    check-links
+	    exit 0
+            ;;
+        *)
+	    MESSAGE=" Unknown option: $i"; log-err
+            ;;
+    esac
 done
+
+exit 0
 
 # EOF
