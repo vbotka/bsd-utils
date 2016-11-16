@@ -1,0 +1,4 @@
+#!/usr/local/bin/bash
+pkg info -a -f | grep -A 2 Name | awk -F "--" '/Name           :/{split($1,name,":"); getline; split($1,version,":") ; getline; split($1,date," "); print "Installed on: " date[8] " " date[5] " " date[6] "\t" name[2] version[2]}'
+
+# EOF
