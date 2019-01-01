@@ -31,9 +31,9 @@
 # Befor running this script complete the following steps:
 # 1) Install system
 # 2) Change passord for default user "freebsd" and "root"
-# 4) Configure network
-# 5) ssh-copy-id freebsd@host
-# 6) Install packages
+# 3) Configure network
+# 4) ssh-copy-id freebsd@host
+# 5) Install packages
 
 aconf_user="asadmin"
 aconf_sudoers="/usr/local/etc/sudoers"
